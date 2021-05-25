@@ -26,6 +26,8 @@ setup(
 
         'singer-python==5.6.0',
 
+        'xlrd==2.0.1',
+
     ],
 
     extras_require={
