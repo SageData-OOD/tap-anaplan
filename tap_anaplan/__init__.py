@@ -16,14 +16,14 @@ KEY_PROPERTIES = {
     'ap_models': ['id']
 }
 
-REQUIRED_CONFIG_KEYS = ['username', 'service_url','workspace','models','filenames']
+REQUIRED_CONFIG_KEYS = ['username', 'service_url', 'pem_key_filepath' 'workspace', 'models', 'filenames']
 LOGGER = singer.get_logger()
 
 
 def header_payload(p_data):
-
     username = p_data['username']
-    cert = open('cert_anaplan.pem').read()
+    # cert = open('tmp/cert_anaplan.pem').read()
+    cert = open(p_data["pem_key_filepath"]).read()
     user = 'AnaplanCertificate ' + str(base64.b64encode((f'{username}:{cert}').encode('utf-8')).decode('utf-8'))
     header = {
         'Authorization': user
@@ -65,10 +65,10 @@ def get_catalog():
 def do_discover():
     LOGGER.info('Loading schemas')
     catalog = get_catalog()
-    LOGGER.info (json.dumps(catalog, indent=2))
+    LOGGER.info(json.dumps(catalog, indent=2))
 
 
-def do_sync(p_data,state,p_catalog):
+def do_sync(p_data, state, p_catalog):
     header = header_payload(p_data)
     for stream in p_catalog['streams']:
         stream_id = stream['tap_stream_id']
@@ -76,58 +76,63 @@ def do_sync(p_data,state,p_catalog):
         mdata = stream['metadata']
         if stream_id == 'ap_workspace':
             url = p_data['service_url'] + "workspaces"
-            load_workspace(p_data, stream_id, url, header,state)
+            load_workspace(p_data, stream_id, url, header, state)
         if stream_id == 'ap_models':
             if workspace_list:
                 for lst_ws in workspace_list:
                     url = p_data['service_url'] + "workspaces/" + lst_ws + "/models"
-                    load_models(p_data,stream_id,url,header,state)
+                    load_models(p_data, stream_id, url, header, state)
                     if model_list:
                         for lst_model in model_list:
-                            url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model +"/exports"
-                            export_definition(url,header)
+                            url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/exports"
+                            export_definition(url, header)
                             export_list.sort()
                             if export_list:
-                                filename_list=input_list(p_data,'filenames')
+                                filename_list = input_list(p_data, 'filenames')
                                 filename_list.sort()
                                 if filename_list:
                                     for lst_exp in export_list:
                                         for lst_file in filename_list:
                                             if str(lst_exp).strip() == str(lst_file).strip():
-                                                tmp_str=str(lst_exp).replace("-","")
-                                                ext_str=os.path.splitext(tmp_str)[0]
+                                                tmp_str = str(lst_exp).replace("-", "")
+                                                ext_str = os.path.splitext(tmp_str)[0]
                                                 ext_str = " ".join(ext_str.split())
-                                                file_name='ap_'+ ext_str.replace(" ","_")
+                                                file_name = 'ap_' + ext_str.replace(" ", "_")
                                                 extension = os.path.splitext(lst_exp)[1]
                                                 if extension == ".xls":
-                                                    file_url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/exports/" + lst_exp +"/tasks"
-                                                    task=export_task(file_url,header)
+                                                    file_url = p_data[
+                                                                   'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/exports/" + lst_exp + "/tasks"
+                                                    task = export_task(file_url, header)
                                                     if task:
-                                                        file_url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
-                                                        excel_data = write_excel_file(file_url,header,lst_exp)
+                                                        file_url = p_data[
+                                                                       'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
+                                                        excel_data = write_excel_file(file_url, header, lst_exp)
                                                         if excel_data:
                                                             singer.write_schema(file_name, {}, [])
                                                             for xls_data in excel_data:
-                                                                singer.write_record(file_name,xls_data)
+                                                                singer.write_record(file_name, xls_data)
                                                                 singer.write_state(state)
                                                             delete_file(lst_exp)
                                                 else:
-                                                    file_url = p_data[ 'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
-                                                    load_file_details(file_url, header, file_name,state)
+                                                    file_url = p_data[
+                                                                   'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
+                                                    load_file_details(file_url, header, file_name, state)
 
                                 else:
                                     for lst_exp in export_list:
-                                        lst_exp=str(lst_exp).strip()
+                                        lst_exp = str(lst_exp).strip()
                                         tmp_str = str(lst_exp).replace("-", "")
                                         ext_str = os.path.splitext(tmp_str)[0]
                                         ext_str = " ".join(ext_str.split())
                                         file_name = 'ap_' + ext_str.replace(" ", "_")
                                         extension = os.path.splitext(lst_exp)[1]
                                         if extension == ".xls":
-                                            file_url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/exports/" + lst_exp + "/tasks"
+                                            file_url = p_data[
+                                                           'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/exports/" + lst_exp + "/tasks"
                                             task = export_task(file_url, header)
                                             if task:
-                                                file_url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
+                                                file_url = p_data[
+                                                               'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
                                                 excel_data = write_excel_file(file_url, header, lst_exp)
                                                 if excel_data:
                                                     singer.write_schema(file_name, {}, [])
@@ -136,33 +141,32 @@ def do_sync(p_data,state,p_catalog):
                                                         singer.write_state(state)
                                                     delete_file(lst_exp)
                                         else:
-                                            file_url = p_data['service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
-                                            load_file_details(file_url, header, file_name,state)
+                                            file_url = p_data[
+                                                           'service_url'] + "workspaces/" + lst_ws + "/models/" + lst_model + "/files/" + lst_exp
+                                            load_file_details(file_url, header, file_name, state)
 
 
             else:
                 exit(0)
 
 
-
-
 def delete_file(p_file_name):
     if os.path.exists(p_file_name):
-       os.remove(p_file_name)
+        os.remove(p_file_name)
 
 
-def export_task (p_url,p_header):
-    response=requests.post(p_url,json={"localeName": "en_US"},headers=p_header)
+def export_task(p_url, p_header):
+    response = requests.post(p_url, json={"localeName": "en_US"}, headers=p_header)
     if (response.status_code == 200):
         end = None
         data = response.text
-        start_index= data.index(':') +2
-        task_id=data[start_index: end]
-        task_id=task_id[1:-3]
+        start_index = data.index(':') + 2
+        task_id = data[start_index: end]
+        task_id = task_id[1:-3]
     return task_id
 
 
-def write_excel_file(p_url,p_header,p_filename):
+def write_excel_file(p_url, p_header, p_filename):
     response = requests.request("GET", p_url, headers=p_header)
     if (response.status_code == 200):
         file = open(p_filename, 'wb')
@@ -184,10 +188,9 @@ def write_excel_file(p_url,p_header,p_filename):
         return data
 
 
-
-def load_workspace(p_data, p_schema, p_url, p_header,p_stae):
+def load_workspace(p_data, p_schema, p_url, p_header, p_stae):
     global workspace_list
-    workspace_list=[]
+    workspace_list = []
     singer.write_schema(p_schema, schemas[p_schema], 'guid')
     response = requests.request("GET", p_url, headers=p_header)
     data = response.json()
@@ -205,11 +208,10 @@ def load_workspace(p_data, p_schema, p_url, p_header,p_stae):
         exit(1)
 
 
-
-def load_models(p_data,p_schema,p_url,p_header,p_stae):
+def load_models(p_data, p_schema, p_url, p_header, p_stae):
     global model_list
     model_list = []
-    ip_model_list=input_list(p_data,'models')
+    ip_model_list = input_list(p_data, 'models')
     if ip_model_list:
         singer.write_schema(p_schema, schemas[p_schema], 'id')
         response = requests.request("GET", p_url, headers=p_header)
@@ -235,7 +237,7 @@ def load_models(p_data,p_schema,p_url,p_header,p_stae):
             exit(1)
 
 
-def export_definition(p_url,p_header):
+def export_definition(p_url, p_header):
     global export_list
     export_list = []
     response = requests.request("GET", p_url, headers=p_header)
@@ -248,19 +250,18 @@ def export_definition(p_url,p_header):
     export_list
 
 
-def input_list (p_data,p_type):
+def input_list(p_data, p_type):
     ip_list = []
-    str_input=""
+    str_input = ""
     if p_type == 'filenames':
         str_input = str(p_data['filenames']).strip('[]')
     if p_type == 'models':
-       str_input = str(p_data['models']).strip('[]')
+        str_input = str(p_data['models']).strip('[]')
     if str_input:
         for lst_input in str_input.split(','):
-            lst_input=lst_input.replace("'","")
+            lst_input = lst_input.replace("'", "")
             ip_list.append(lst_input)
     return ip_list
-
 
 
 def get_row_iterator(iterable, options=None):
@@ -268,7 +269,8 @@ def get_row_iterator(iterable, options=None):
     file_stream = codecs.iterdecode(iterable, encoding='ISO-8859-1')
     field_names = None
     # Replace any NULL bytes in the line given to the DictReader
-    reader = csv.DictReader((line.replace('\0', '') for line in file_stream), fieldnames=field_names, restkey=SDC_EXTRA_COLUMN, delimiter=options.get('delimiter', ','))
+    reader = csv.DictReader((line.replace('\0', '') for line in file_stream), fieldnames=field_names,
+                            restkey=SDC_EXTRA_COLUMN, delimiter=options.get('delimiter', ','))
     headers = set(reader.fieldnames)
     if options.get('key_properties'):
         key_properties = set(options['key_properties'])
@@ -283,7 +285,7 @@ def get_row_iterator(iterable, options=None):
     return reader
 
 
-def load_file_details(p_url, p_header, p_filename,p_state):
+def load_file_details(p_url, p_header, p_filename, p_state):
     response = requests.request("GET", p_url, headers=p_header)
     if (response.status_code == 200):
         singer.write_schema(p_filename, {}, [])
@@ -293,7 +295,6 @@ def load_file_details(p_url, p_header, p_filename,p_state):
             singer.write_state(p_state)
     else:
         exit(1)
-
 
 
 def get_abs_path(path):
